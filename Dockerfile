@@ -15,7 +15,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # 複製腳本文件
-COPY p123dav(1).py ./p123dav.py
+COPY p123dav.py ./p123dav.py
 
 # 設置環境變量（默認值可選）
 ENV P123_PASSPORT=""
