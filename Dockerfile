@@ -16,7 +16,6 @@ RUN pip install --no-cache-dir \
     orjson \
     p123 \
     wsgidav \
-    # 其他依赖...
 
 # 暴露端口
 EXPOSE 8123
