@@ -1,6 +1,6 @@
 cachedict
 orjson
-p123
+python-123-client
 property
 sqlitetools
 wsgidav
