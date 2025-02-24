@@ -1,17 +1,21 @@
-# 使用 Alpine 镜像作为基础
-FROM python:3.13.2-alpine
+# 使用 Python 官方镜像
+FROM python:3.10-slim
+
+# 设置工作目录
+WORKDIR /app
 
 # 安装系统依赖
-RUN apk update && apk add --no-cache \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
-    musl-dev \
-    python3-dev
+    python3-dev \
+    && rm -rf /var/lib/apt/lists/*
 
-# 其他部分保持不变
-WORKDIR /app
+# 复制依赖列表并安装 Python 依赖
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-COPY p123dav.py ./p123dav.py
+
+# 复制主脚本
+COPY p123dav.py /app/p123dav.py
 
 # 设置环境变量
 ENV PORT=8123
@@ -20,4 +24,4 @@ ENV PORT=8123
 EXPOSE $PORT
 
 # 运行命令
-CMD ["python", "p123dav.py"]
+CMD ["python", "/app/p123dav.py"]
