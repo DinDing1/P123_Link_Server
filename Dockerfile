@@ -14,7 +14,7 @@ COPY . /app
 RUN pip install --no-cache-dir \
     cachedict \
     orjson \
-    p123 \
+    p123client \
     wsgidav \
 
 # 暴露端口
