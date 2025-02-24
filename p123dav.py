@@ -8,6 +8,7 @@ __version__ = (0, 0, 0)
 __all__ = [""]
 
 import errno
+import os
 
 from collections.abc import Mapping
 from datetime import datetime
@@ -36,8 +37,14 @@ register_converter("JSON", loads)
 
 
 # TODO: 修改为自己的账户和密码
-client = P123Client(passport="13554540004", password="ztj040712")
-con = connect("123-{client.passport}.db", check_same_thread=False, autocommit=True, detect_types=PARSE_DECLTYPES)
+# 修改client初始化部分
+passport = os.getenv("P123_PASSPORT")
+password = os.getenv("P123_PASSWORD")
+if not passport or not password:
+    raise ValueError("必须设置P123_PASSPORT和P123_PASSWORD环境变量")
+
+client = P123Client(passport=passport, password=password)
+con = connect(f"/data/123-{passport}.db", check_same_thread=False, autocommit=True, detect_types=PARSE_DECLTYPES)
 con.executescript("""\
 PRAGMA journal_mode = WAL;
 CREATE TABLE IF NOT EXISTS data (
