@@ -1,16 +1,28 @@
-# 使用官方Python基础镜像，确保版本大于3.12
+# 使用 Python 3.12 的官方鏡像
 FROM python:3.12-slim
 
-# 设置工作目录
+# 設置工作目錄
 WORKDIR /app
 
-# 复制当前目录下的所有文件到工作目录
-COPY . /app
+# 安裝系統依賴（部分Python包需要編譯工具）
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    python3-dev \
+    && rm -rf /var/lib/apt/lists/*
 
-RUN pip install --no-cache-dir cachedict orjson wsgidav p123client
+# 複製項目文件
+COPY requirements.txt .
+COPY p123dav.py .
+
+# 安裝Python依賴
+RUN pip install --no-cache-dir -r requirements.txt
+
+# 設置環境變量（密碼建議通過運行時傳入）
+ENV P123_PASSPORT=""
+ENV P123_PASSWORD=""
 
 # 暴露端口
 EXPOSE 8123
 
-# 指定容器启动时执行的命令（这里假设你想运行这个脚本）
+# 啟動命令
 CMD ["python", "p123dav.py"]
