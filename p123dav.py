@@ -13,7 +13,6 @@ import os
 passport = os.environ.get("P123_PASSPORT", "")
 password = os.environ.get("P123_PASSWORD", "")
 
-
 from collections.abc import Mapping
 from datetime import datetime
 from shutil import SameFileError
@@ -26,7 +25,7 @@ from uuid import uuid4
 
 from cachedict import LRUDict
 from orjson import dumps, loads
-from p123 import check_response, P123Client
+from python_123_client import check_response, P123Client
 from property import locked_cacheproperty
 from sqlitetools import find
 from wsgidav.wsgidav_app import WsgiDAVApp # type: ignore
