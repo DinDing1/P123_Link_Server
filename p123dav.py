@@ -8,10 +8,6 @@ __version__ = (0, 0, 0)
 __all__ = [""]
 
 import errno
-import os
-
-passport = os.environ.get("P123_PASSPORT", "")
-password = os.environ.get("P123_PASSWORD", "")
 
 from collections.abc import Mapping
 from datetime import datetime
@@ -25,7 +21,7 @@ from uuid import uuid4
 
 from cachedict import LRUDict
 from orjson import dumps, loads
-from python_123_client import check_response, P123Client
+from p123 import check_response, P123Client
 from property import locked_cacheproperty
 from sqlitetools import find
 from wsgidav.wsgidav_app import WsgiDAVApp # type: ignore
@@ -40,7 +36,7 @@ register_converter("JSON", loads)
 
 
 # TODO: 修改为自己的账户和密码
-client = P123Client(passport=passport, password=password)
+client = P123Client(passport="13554540004", password="ztj040712")
 con = connect("123-{client.passport}.db", check_same_thread=False, autocommit=True, detect_types=PARSE_DECLTYPES)
 con.executescript("""\
 PRAGMA journal_mode = WAL;
