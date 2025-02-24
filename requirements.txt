@@ -1,4 +1,3 @@
 wsgidav
 orjson
-sqlitetools
 cachetools
