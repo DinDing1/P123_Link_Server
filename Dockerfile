@@ -21,8 +21,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY p123dav.py /app/p123dav.py
 
 # 设置环境变量
-ENV P123_PASSPORT=""
-ENV P123_PASSWORD=""
 ENV PORT=8123
 
 # 暴露端口
