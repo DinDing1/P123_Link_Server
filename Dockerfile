@@ -1,5 +1,5 @@
-# 使用官方Python 3鏡像
-FROM python:3.10-slim
+# 使用 Alpine 镜像作为基础
+FROM python:3.13.2-alpine
 
 # 設置工作目錄
 WORKDIR /app
