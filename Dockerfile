@@ -1,30 +1,25 @@
-# 使用 Python 3.10 镜像
-FROM python:3.10-slim
-
-# 安装系统依赖
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc \
-    python3-dev \
-    && rm -rf /var/lib/apt/lists/*
+# 使用官方Python基础镜像，确保版本大于3.12
+FROM python:3.12-slim
 
 # 设置工作目录
 WORKDIR /app
 
-# 升级 pip
-RUN pip install --upgrade pip
+# 复制当前目录下的所有文件到工作目录
+COPY . /app
 
-# 复制依赖列表并安装
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-# 复制主脚本和自定义模块
-COPY p123dav.py /app/p123dav.py
-
-# 设置环境变量
-ENV PORT=8123
+# 安装依赖包
+# 注意：这里需要根据你的script.py中实际使用的库来安装依赖
+# 由于你的脚本中使用了多个第三方库，这里列出了一些可能的依赖，但可能不完整
+# 你需要运行脚本并查看报错信息来补充所有缺失的依赖
+RUN pip install --no-cache-dir \
+    cachedict \
+    orjson \
+    p123 \
+    wsgidav \
+    # 其他依赖...
 
 # 暴露端口
-EXPOSE $PORT
+EXPOSE 8123
 
-# 启动命令
-CMD ["python", "/app/p123dav.py"]
+# 指定容器启动时执行的命令（这里假设你想运行这个脚本）
+CMD ["python", "p123dav.py"]
