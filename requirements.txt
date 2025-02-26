@@ -1,1 +1,7 @@
-
+orjson
+httpx
+wsgidav
+cachedict
+property
+sqlitetools
+tenacity
