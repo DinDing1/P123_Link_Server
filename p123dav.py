@@ -8,8 +8,10 @@ __version__ = (0, 0, 0)
 __all__ = [""]
 
 import errno
+import time
+import httpx
 import os
-
+from threading import Lock
 from collections.abc import Mapping
 from datetime import datetime
 from shutil import SameFileError
@@ -35,16 +37,11 @@ register_adapter(list, dumps)
 register_adapter(dict, dumps)
 register_converter("JSON", loads)
 
-
-# TODO: 修改为自己的账户和密码
-# 修改client初始化部分
-passport = os.getenv("P123_PASSPORT")
-password = os.getenv("P123_PASSWORD")
-if not passport or not password:
-    raise ValueError("必须设置P123_PASSPORT和P123_PASSWORD环境变量")
-
+# 修改后（从环境变量读取）
+passport = os.environ.get("P123_PASSPORT")
+password = os.environ.get("P123_PASSWORD")
 client = P123Client(passport=passport, password=password)
-con = connect(f"/data/123-{passport}.db", check_same_thread=False, autocommit=True, detect_types=PARSE_DECLTYPES)
+con = connect("123-{client.passport}.db", check_same_thread=False, autocommit=True, detect_types=PARSE_DECLTYPES)
 con.executescript("""\
 PRAGMA journal_mode = WAL;
 CREATE TABLE IF NOT EXISTS data (
@@ -61,9 +58,6 @@ CREATE INDEX IF NOT EXISTS idx_data_abspath ON data(abspath);
 """)
 cache: LRUDict[int, FileResource] = LRUDict()
 
-
-# TODO: 再返回一个信息，目标是文件还是目录
-# TODO: 在数据库中不存在，不代表真的不存在，还需要在实际的文件系统中进行找寻
 def get_id_to_path(path: str) -> tuple[int, list[str]]:
     path = path.strip("/")
     if not path:
@@ -75,12 +69,12 @@ def get_id_to_path(path: str) -> tuple[int, list[str]]:
     for i, name in enumerate(parts):
         if not name:
             continue
-        id, is_dir = find(con, sql, (parent_id, name), default=(0, 1))
-        if not id or not is_dir and i < end:
+        # 修复括号闭合问题
+        id, is_dir = find(con, sql, (parent_id, name)) or (0, 1)
+        if not id or (not is_dir and i < end):
             return parent_id, parts[i:]
         parent_id = id
     return id, []
-
 
 class DavPathBase:
 
@@ -178,12 +172,12 @@ class DavPathBase:
                     resp = check_response(client.fs_rename({"FileId": self.id, "fileName": name}))
                     info = resp["data"]["Info"][0]
                     con.execute("REPLACE INTO data(id, attr) VALUES (?,?)", (self.id, info))
-                except:
+                except Exception as e:
                     check_response(client.fs_move(self.id, parent_id=int(self.attr["ParentFileId"])))
-                    raise
-            except:
+                    raise e
+            except Exception as e:
                 client.fs_rename({"FileId": self.id, "fileName": old_name})
-                raise
+                raise e
 
     def support_modified(self, /) -> bool:
         return True
@@ -193,7 +187,6 @@ class DavPathBase:
 
     def support_recursive_move(self, /, dest_path: str) -> bool:
         return True
-
 
 class TempFileResource(DAVNonCollection):
 
@@ -240,7 +233,6 @@ class TempFileResource(DAVNonCollection):
 
     def support_ranges(self, /) -> bool:
         return False
-
 
 class FileResource(DavPathBase, DAVNonCollection):
 
@@ -298,8 +290,8 @@ class FileResource(DavPathBase, DAVNonCollection):
     def support_ranges(self, /) -> bool:
         return True
 
-
 class FolderResource(DavPathBase, DAVCollection):
+    _children_lock = Lock()
 
     def __init__(
         self, 
@@ -313,30 +305,41 @@ class FolderResource(DavPathBase, DAVCollection):
 
     @locked_cacheproperty
     def children(self, /) -> dict[str, FileResource | FolderResource]:
-        # TODO: 先用，如果有风控，后面会加入分流机制
-        # TODO: 一页获取 100 条实在太慢，后面加上并发机制
-        children: dict[str, FileResource | FolderResource] = {}
-        environ = self.environ
-        dirname = self.path
-        if not dirname.endswith("/"):
-            dirname += "/"
-        parent_id = self.id
-        payload = {"parentFileId": parent_id}
-        for i in count(1):
-            payload["Page"] = i
-            resp = check_response(client.fs_list_new(payload))
-            for attr in resp["data"]["InfoList"]:
-                name = attr["FileName"]
-                path = dirname + name
-                if attr["Type"]:
-                    children[name] = FolderResource(path, environ, attr)
-                else:
-                    children[name] = FileResource(path, environ, attr)
-            if resp["data"]["Next"] == "-1":
-                break
-        con.execute("DELETE FROM data WHERE parent_id = ?", (parent_id,))
-        con.executemany("REPLACE INTO data(id, attr) VALUES (?,?)", ((f.id, f.attr) for f in children.values()))
-        return children
+        with self._children_lock:
+            children: dict[str, FileResource | FolderResource] = {}
+            environ = self.environ
+            dirname = self.path
+            if not dirname.endswith("/"):
+                dirname += "/"
+            parent_id = self.id
+            payload = {"parentFileId": parent_id}
+
+            def fetch_page(page):
+                time.sleep(0.5)
+                payload["Page"] = page
+                return check_response(client.fs_list_new(payload))
+
+            for i in count(1):
+                try:
+                    resp = fetch_page(i)
+                except httpx.HTTPStatusError as e:
+                    if e.response.status_code == 403:
+                        print("触发频率限制，请稍后再试")
+                        raise e
+                    else:
+                        raise e
+                for attr in resp["data"]["InfoList"]:
+                    name = attr["FileName"]
+                    path = dirname + name
+                    if attr["Type"]:
+                        children[name] = FolderResource(path, environ, attr)
+                    else:
+                        children[name] = FileResource(path, environ, attr)
+                if resp["data"]["Next"] == "-1":
+                    break
+            con.execute("DELETE FROM data WHERE parent_id = ?", (parent_id,))
+            con.executemany("REPLACE INTO data(id, attr) VALUES (?,?)", ((f.id, f.attr) for f in children.values()))
+            return children
 
     def create_collection(self, /, name: str) -> FolderResource:
         resp = check_response(client.fs_mkdir(name, parent_id=self.id))
@@ -348,7 +351,7 @@ class FolderResource(DavPathBase, DAVCollection):
         resp = check_response(client.upload_file_fast(file_name=name, parent_id=self.id, duplicate=1))
         info = resp["data"]["Info"]
         con.execute("REPLACE INTO data(id, attr) VALUES (?,?)", (int(info["FileId"]), info))
-        return FolderResource(joinpath(self.path, name), self.environ, info)
+        return FileResource(joinpath(self.path, name), self.environ, info)
 
     def get_member(self, /, name: str) -> None | FileResource | FolderResource:
         if obj := self.children.get(name):
@@ -367,7 +370,6 @@ class FolderResource(DavPathBase, DAVCollection):
         elif name == "{DAV:}iscollection":
             return True
         return super().get_property_value(name)
-
 
 class P123FileSystemProvider(DAVProvider):
 
@@ -393,7 +395,10 @@ class P123FileSystemProvider(DAVProvider):
                     if resp["data"]["Next"] == "-1":
                         break
                 con.execute("DELETE FROM data WHERE parent_id = ?", (parent_id,))
-                con.executemany("REPLACE INTO data(id, attr) VALUES (?,?)", ((int(a["FileId"]), a) for a in ls))
+                con.executemany(
+                    "REPLACE INTO data(id, attr) VALUES (?,?)", 
+                    [(int(a["FileId"]), a) for a in ls]
+                )
                 for attr in ls:
                     if attr["FileName"] == name:
                         if not attr["Type"] and i < len(remains):
@@ -419,12 +424,11 @@ class P123FileSystemProvider(DAVProvider):
         else:
             return FileResource(path, environ, attr)
 
-
 if __name__ == "__main__":
     config = {
         "server": "cheroot", 
         "host": "0.0.0.0", 
-        "port": 8123, 
+        "port": 8124, 
         "mount_path": "", 
         "simple_dc": {"user_mapping": {"*": True}}, 
         "provider_mapping": {"/": P123FileSystemProvider()}, 
@@ -442,6 +446,3 @@ if __name__ == "__main__":
 💥 Welcome to 123 WebDAV 😄
 """)
     handler(app, config, server)
-
-# TODO: 插入用单独线程
-# TODO: 缓存一定量的文件列表
