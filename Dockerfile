@@ -1,28 +1,15 @@
-# 使用官方 Python 镜像作为基础镜像
-FROM python:3.12-slim
-
-# 设置工作目录
+# 第一阶段：构建依赖
+FROM python:3.12 as builder
 WORKDIR /app
-
-# 复制项目文件到容器中
 COPY . .
-
-# 安装系统依赖（如有需要）
-# RUN apt-get update && apt-get install -y --no-install-recommends gcc python3-dev
-
-# 安装 Python 依赖
+RUN apt-get update && apt-get install -y gcc python3-dev rustc cargo
 RUN pip install --no-cache-dir -U pip && \
-    pip install --no-cache-dir \
-    orjson \
-    httpx \
-    wsgidav \
-    cachedict \
-    property \
-    sqlitetools3 \
-    tenacity
+    pip install --no-cache-dir -r requirements.txt
 
-# 暴露 WebDAV 服务端口
+# 第二阶段：生产镜像
+FROM python:3.12-slim
+WORKDIR /app
+COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
+COPY . .
 EXPOSE 8123
-
-# 设置启动命令
 CMD ["python", "p123dav.py"]
