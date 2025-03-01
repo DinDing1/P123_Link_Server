@@ -4,12 +4,15 @@ from p123 import P123Client, check_response
 import logging
 import os
 
-# 修改日志配置（可选，推荐 Docker 使用标准输出）
+logger = logging.getLogger(__name__)  # 必须保留这一行
+
+# 配置日志处理器（已优化为仅控制台输出）
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[logging.StreamHandler()]  # 仅保留控制台输出
+    handlers=[logging.StreamHandler()]  # 删除文件日志，仅保留控制台
 )
+
 
 # 初始化客户端并显式登录
 # 建议将敏感信息改为从环境变量读取（修改代码）
