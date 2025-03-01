@@ -2,6 +2,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 from p123 import P123Client, check_response
 import logging
+import os
 
 # 配置日志
 logging.basicConfig(
@@ -12,7 +13,11 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # 初始化客户端并显式登录
-client = P123Client(passport="13554540004", password="ztj040712")
+# 建议将敏感信息改为从环境变量读取（修改代码）
+client = P123Client(
+    passport=os.getenv("P123_PASSPORT"),
+    password=os.getenv("P123_PASSWORD")
+)
 client.login()  # 关键修复：显式登录
 
 app = FastAPI(debug=True)
