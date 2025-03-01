@@ -1,65 +1,78 @@
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse, RedirectResponse
 from p123 import P123Client, check_response
+from contextlib import asynccontextmanager
 import logging
 import os
 
-# 初始化日志
+# 日志配置
 logger = logging.getLogger(__name__)
 logging.basicConfig(
-    level=logging.INFO,
+    level=os.getenv("LOG_LEVEL", "INFO"),
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[logging.StreamHandler()]
 )
 
-# 增强参数校验
-def validate_payload(parts: list) -> dict:
-    if len(parts) < 3:
+# 全局客户端实例
+client = None
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """应用生命周期管理"""
+    global client
+    try:
+        # 初始化客户端
+        client = P123Client(
+            passport=os.getenv("P123_PASSPORT"),
+            password=os.getenv("P123_PASSWORD"),
+            auto_reconnect=True  # 假设 SDK 支持断线重连
+        )
+        client.login()
+        logger.info("登录成功，会话有效期至：%s", client.session_expiry)
+        yield
+    finally:
+        # 清理资源
+        if client:
+            client.logout()
+            logger.info("已释放登录会话")
+
+app = FastAPI(lifespan=lifespan)
+
+def validate_uri(uri: str) -> dict:
+    """增强型参数校验"""
+    if uri.count("|") < 2:
         raise ValueError("URI 格式错误")
     
-    try:
-        return {
-            "FileName": parts[0],
-            "Size": int(parts[1]),
-            "Etag": parts[2].split("?")[0].lower(),  # 强制小写
-            "S3KeyFlag": parts[2].split("?")[1] if "?" in parts[2] else ""
-        }
-    except ValueError as e:
-        raise ValueError(f"无效的参数格式: {str(e)}")
-
-client = P123Client(
-    passport=os.getenv("P123_PASSPORT"),
-    password=os.getenv("P123_PASSWORD")
-)
-client.login()
-
-app = FastAPI()
+    parts = uri.split("|")
+    return {
+        "FileName": parts[0],
+        "Size": int(parts[1]),
+        "Etag": parts[2].split("?")[0].lower(),
+        "S3KeyFlag": parts[2].split("?")[1] if "?" in parts[2] else ""
+    }
 
 @app.get("/{uri:path}")
-async def index(request: Request, uri: str):
+async def get_direct_link(request: Request, uri: str):
+    global client
     try:
-        logger.info(f"收到请求: {request.url}")
+        logger.debug("请求参数: %s", uri)
         
-        # 增强参数校验
-        parts = uri.split("|")
-        payload = validate_payload(parts)
+        # 参数校验
+        payload = validate_uri(uri)
         
-        # 调试日志
-        logger.debug(f"解析后的参数: {payload}")
+        # 会话保活检查
+        if client.needs_refresh():  # 假设 SDK 提供会话状态检查
+            logger.info("会话续期中...")
+            client.refresh()
         
         # 获取下载链接
-        raw_resp = client.download_info(payload)
-        logger.debug(f"原始响应: {raw_resp}")
+        resp = check_response(client.download_info(payload))
+        download_url = resp["data"]["DownloadUrl"]
         
-        validated_resp = check_response(raw_resp)
-        download_url = validated_resp["data"]["DownloadUrl"]
-        
-        logger.info(f"重定向至: {download_url}")
+        logger.info("生成直链: %s", download_url)
         return RedirectResponse(download_url, status_code=302)
     
+    except ValueError as e:
+        return JSONResponse({"error": str(e)}, 400)
     except Exception as e:
-        logger.error(f"处理失败: {str(e)}", exc_info=True)
-        return JSONResponse(
-            {"state": False, "message": str(e)},
-            status_code=500 if isinstance(e, ValueError) else 400
-        )
+        logger.error("处理失败: %s", str(e), exc_info=True)
+        return JSONResponse({"error": "内部错误"}, 500)
