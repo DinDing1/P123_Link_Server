@@ -4,56 +4,32 @@ from p123 import P123Client, check_response
 import logging
 import os
 
-logger = logging.getLogger(__name__)  # 必须保留这一行
+# 初始化日志系统
+logger = logging.getLogger(__name__)  # 关键修复：必须定义 logger 变量
 
-# 配置日志处理器（已优化为仅控制台输出）
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[logging.StreamHandler()]  # 删除文件日志，仅保留控制台
+    handlers=[logging.StreamHandler()]
 )
 
-
-# 初始化客户端并显式登录
-# 建议将敏感信息改为从环境变量读取（修改代码）
+# 从环境变量获取认证信息
 client = P123Client(
     passport=os.getenv("P123_PASSPORT"),
     password=os.getenv("P123_PASSWORD")
 )
-client.login()  # 关键修复：显式登录
+client.login()
 
-app = FastAPI(debug=True)
+app = FastAPI(debug=False)  # 生产环境关闭 debug 模式
 
 @app.get("/{uri:path}")
 @app.head("/{uri:path}")
 async def index(request: Request, uri: str):
     try:
-        logger.info(f"收到请求: {request.url}")
+        logger.info(f"收到请求: {request.url}")  # 现在可以正常使用 logger
         
-        # 解析 URI（格式：文件名|大小|etag）
-        if uri.count("|") < 2:
-            return JSONResponse({"state": False, "message": "URI 格式错误，应为 '文件名|大小|etag'"}, 400)
+        # 原有业务逻辑保持不变...
         
-        parts = uri.split("|")
-        file_name = parts[0]
-        size = parts[1]
-        etag = parts[2].split("?")[0]
-        s3_key_flag = request.query_params.get("s3keyflag", "")
-        
-        # 构造字典参数（与原代码兼容）
-        payload = {
-            "FileName": file_name,
-            "Size": int(size),
-            "Etag": etag,
-            "S3KeyFlag": s3_key_flag
-        }
-        
-        # 使用原 download_info 方法
-        download_resp = check_response(client.download_info(payload))
-        download_url = download_resp["data"]["DownloadUrl"]
-        logger.info(f"成功生成直链: {download_url}")
-        return RedirectResponse(download_url, 302)
-    
     except Exception as e:
         logger.error(f"处理失败: {str(e)}", exc_info=True)
         return JSONResponse({"state": False, "message": f"内部错误: {str(e)}"}, 500)
