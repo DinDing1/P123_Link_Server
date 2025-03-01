@@ -1,7 +1,4 @@
-orjson
-httpx
-wsgidav
-cachedict
-property
-sqlitetools
-tenacity
+fastapi
+uvicorn
+requests
+git+https://github.com/ChenyangGao/web-mount-packs.git#subdirectory=python-123-client
