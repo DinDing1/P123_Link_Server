@@ -1,9 +1,19 @@
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 from p123 import P123Client, check_response
+import logging
 
-# TODO: 改成你自己的账户和密码
+# 配置日志
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[logging.FileHandler("direct_link_service.log"), logging.StreamHandler()]
+)
+logger = logging.getLogger(__name__)
+
+# 初始化客户端并显式登录
 client = P123Client(passport="13554540004", password="ztj040712")
+client.login()  # 关键修复：显式登录
 
 app = FastAPI(debug=True)
 
@@ -11,33 +21,34 @@ app = FastAPI(debug=True)
 @app.head("/{uri:path}")
 async def index(request: Request, uri: str):
     try:
+        logger.info(f"收到请求: {request.url}")
+        
         # 解析 URI（格式：文件名|大小|etag）
         if uri.count("|") < 2:
             return JSONResponse({"state": False, "message": "URI 格式错误，应为 '文件名|大小|etag'"}, 400)
         
-        # 提取参数
         parts = uri.split("|")
         file_name = parts[0]
         size = parts[1]
-        etag = parts[2].split("?")[0]  # 提取 etag（忽略查询参数部分）
+        etag = parts[2].split("?")[0]
+        s3_key_flag = request.query_params.get("s3keyflag", "")
         
-        # 提取 s3keyflag（从查询参数）
-        s3_key_flag = request.query_params.get("s3keyflag", "")  # 关键修改
-        
-        # 构造下载参数
+        # 构造字典参数（与原代码兼容）
         payload = {
             "FileName": file_name,
             "Size": int(size),
             "Etag": etag,
-            "S3KeyFlag": s3_key_flag  # 参数名需与 API 一致（注意大小写）
+            "S3KeyFlag": s3_key_flag
         }
         
-        # 获取下载链接
+        # 使用原 download_info 方法
         download_resp = check_response(client.download_info(payload))
         download_url = download_resp["data"]["DownloadUrl"]
+        logger.info(f"成功生成直链: {download_url}")
         return RedirectResponse(download_url, 302)
     
     except Exception as e:
+        logger.error(f"处理失败: {str(e)}", exc_info=True)
         return JSONResponse({"state": False, "message": f"内部错误: {str(e)}"}, 500)
 
 if __name__ == "__main__":
