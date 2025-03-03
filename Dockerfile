@@ -8,7 +8,7 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y git
 
 # 克隆 web-mount-packs 仓库
-RUN git clone https://github.com/ChenyangGao/web-mount-packs/tree/main/python-123-client.git /app/web-mount-packs
+RUN git clone https://github.com/ChenyangGao/web-mount-packs.git /app/web-mount-packs
 
 # 复制当前目录下的所有文件到容器的 /app 目录
 COPY . /app
@@ -17,7 +17,7 @@ COPY . /app
 RUN pip install --no-cache-dir fastapi uvicorn
 
 # 将 web-mount-packs 目录添加到 PYTHONPATH
-ENV PYTHONPATH "${PYTHONPATH}:/app/web-mount-packs"
+ENV PYTHONPATH "${PYTHONPATH}:/app/web-mount-packs/python-123-client"
 
 # 暴露端口
 EXPOSE 8123
