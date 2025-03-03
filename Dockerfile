@@ -4,17 +4,19 @@ FROM python:3.9-slim
 # 设置工作目录
 WORKDIR /app
 
+# 安装 Git 和依赖项
+RUN apt-get update && apt-get install -y git
+
+# 克隆 web-mount-packs 仓库
+RUN git clone https://github.com/ChenyangGao/web-mount-packs.git /app/web-mount-packs
+
 # 复制当前目录下的所有文件到容器的 /app 目录
 COPY . /app
 
-# 安装依赖
+# 安装 Python 依赖
 RUN pip install --no-cache-dir fastapi uvicorn
 
-# 克隆 p123 源码
-RUN apt-get update && apt-get install -y git
-RUN git clone https://github.com/ChenyangGao/web-mount-packs.git /app/web-mount-packs
-
-# 将 p123 模块添加到 Python 路径
+# 将 web-mount-packs 目录添加到 PYTHONPATH
 ENV PYTHONPATH "${PYTHONPATH}:/app/web-mount-packs"
 
 # 暴露端口
